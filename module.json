@@ -32,19 +32,19 @@
       {
         "id": "axeclefts-armory",
         "type": "module",
-        "manifest": "https://github.com/Axecleft/Armory/releases/latest/download/module.json",
+        "manifest": "https://github.com/Axecleft/Armory-v11/releases/latest/download/module.json",
         "reason": "Magic weapons and armor for treasure, merchants and crafting"
       },
       {
         "id": "axeclefts-curios",
         "type": "module",
-        "manifest": "https://github.com/Axecleft/Curios/releases/latest/download/module.json",
+        "manifest": "https://github.com/Axecleft/Curios-v11/releases/latest/download/module.json",
         "reason": "Potions, scrolls, wands, rings and wondrous items"
       },
       {
         "id": "axecleft-gemstones",
         "type": "module",
-        "manifest": "https://github.com/Axecleft/Axeclefts-Gemstones/releases/latest/download/module.json",
+        "manifest": "https://github.com/Axecleft/Axeclefts-Gemstones-v11/releases/latest/download/module.json",
         "reason": "Gems, art objects and jewelry for treasure and merchants"
       }
     ]
