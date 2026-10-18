@@ -1,2 +1,206 @@
-# Traps-and-Poisons-v11
-The v11 compatible version of my Traps, Poisons, and Diseases module 
+# Axecleft's Traps, Poisons, and Diseases
+A collection of Traps, Poisons, and Diseases from the Dungeons and Dragons 3.5 SRD
+
+Changelog:
+
+v1.14.6.18:
+
+- Ships Axecleft's Tools 9.2: the User Guide button opens the Tool Suite's wiki in Foundry's language: French, Spanish, Brazilian Portuguese or European Portuguese when you play in one of them, English otherwise.
+
+v1.14.6.17:
+
+- Ships Axecleft's Tools 9.1: a User Guide button at the end of the Axecleft's Tools toolbar group (and menu), for GMs and players. It opens the Tool Suite's wiki (https://github.com/Axecleft/Axecleft-s-Tools-Suite/wiki/Home) in your web browser.
+
+v1.14.6.16:
+
+- Only mechanical traps can be recovered into a kit. A magic trap (Acid Arrow Trap, Fire Trap…) no longer offers recovery in My Traps, and trying is refused with a message before any roll. Before, the roll was made and approved, then nothing happened.
+- A trap kit request that fails now says why in a notification, as well as on its chat card.
+- Hand-placed traps record whether they are magic when they are placed; ones placed before this version are checked when the GM opens the scene.
+
+v1.14.6.15:
+
+- Recovering a trap uses the character's token on the scene when it isn't linked to its actor: an unlinked token has its own copy of the character, with its own skills and inventory, so its Disable Device bonus is used and the kit goes into its inventory. With several characters, the choice keeps the token copy.
+
+v1.14.6.14:
+
+- Recovering a trap now rolls Disable Device with D35E's own skill roll, so every bonus on the character sheet counts (feats, items, buffs, not only ranks and ability), with D35E's roll dialog for situational modifiers. Taking 20 isn't allowed: failing can disable or trigger the trap.
+- Ships the Crafting engine 1.94.
+
+v1.14.6.13:
+
+- A trap the GM puts on a scene by hand (dragged from the Actors sidebar or a compendium) is now a placed trap, like one set from a trap kit: its status button on the token HUD, the Placed Traps window (status, the eye for which players know about it, show on the scene), and recovery into a kit for mechanical traps. Trap tokens already on a scene are picked up when the GM opens the scene.
+
+v1.14.6.12:
+
+- New setting, "Trap kits: crafting progress": the coin each week's Craft (trapmaking) progress is counted in. Silver pieces (SRD, the default); copper pieces (10 times slower); gold pieces (10 times faster); platinum pieces (100 times faster). The SRD's silver makes costly traps take years: a Wide-Mouth Spiked Pit Trap (7,200 gp, DC 25) takes 288 weeks for a crafter whose check is 10.
+- Ships the Crafting engine 1.93.
+
+v1.14.6.11:
+
+- Ships Crafting 1.92: a staff (or, for powers, a psicrown) can supply a spell for crafting; scrolls and wands name their psionic equivalents (power stone, dorje).
+
+v1.14.6.10:
+
+- A trap placed from a trap kit always shows the trap's own name (in My Traps, on the scene marker and on chat cards); before, its token could keep an older name from the actor it was copied from.
+- Ships Axecleft's Tools 9.0, Crafting 1.91: the same scripts now run on Foundry v11 too (the Foundry v11 build of this module is 1.11 instead of 1.14). On v11, windows and dialogs use Foundry's classic ones; nothing changes on v13/v14.
+
+v1.14.6.9:
+
+- French draft, second pass: Gigalad's terminology corrections are applied (weapon and armor abilities, bane foes, metamagic words, item grades Faible/Puissant, Pierre psionique, Biens précieux, Token, Améliorer, Objet spécial, Grimoire).
+
+v1.14.6.8:
+
+- French draft: lang/fr.json (buttons, menus, hints, messages and name patterns) are filled in, and languages.json now lists fr, so worlds set to French show this module in French. A first draft for Gigalad to correct; English worlds are unchanged.
+
+v1.14.6.7:
+
+- Axecleft's Tools 8.4: word files. Each module's lang folder has words.template.json, every English word that goes into names (abilities, materials, base items, gems, art objects, item kinds, shop-name words); a translator copies it to <code>.words.json and writes each word with a short notation: "Épée longue (f)" (text and gender), "(f)" (gender only, keeping Babele's name), "acéré/acérée/acérés/acérées" (forms that agree with the noun), "de feu (of)" (a word that moves after the noun). Patterns can also hold agreeing words: {~sculpté/sculptée}. lang/README.md explains it.
+- Traps has no words of its own yet (trap kit names use the trap's name).
+- English names are unchanged.
+
+v1.14.6.6:
+
+- Axecleft's Tools 8.3: names built from parts ("+1 Flaming Longsword of Speed", "Scroll of Fireball", "Gold Ring set with Ruby") follow the language's grammar: the name patterns are translated in lang/<code>.json like other texts (word order), and a new grammar file per language (lang/<code>.grammar.json) sets the word for "and", articles, agreement ("acérée" with "Épée longue"), elision (de → d'), contractions (de le → du) and capital letters. Drafts for French, Spanish and Portuguese are included (used once the language is listed in languages.json); lang/README.md explains patterns and grammar files.
+- Trap kit names ("Trap Kit: Wall Blade Trap (CR 1)") go through the grammar and keep their English name.
+- English names are unchanged.
+
+v1.14.6.5:
+
+- The module's own windows are translatable: the Random Trap Generator and its Customize window, the Poison & Disease Creator, trap kits (request and trap-triggered cards, My Traps / Placed Traps, notices and settings) and the Trap kits crafting tab with its price notes. lang/template.json now lists 496 texts.
+- Kept in English on purpose: generated trap stat lines and the poisons, diseases and trap actors the tools make (their text is read back), and the effect words typed in the Poison & Disease Creator (1d6 Con, unconsciousness 1 minute).
+
+v1.14.6.4:
+
+- Axecleft's Tools 8.2: a language loader for Axecleft's modules. Each module has a lang folder (template.json to translate, one file per language, e.g. fr.json); texts not translated yet stay in English, Brazilian and European Portuguese fall back on each other, and setting names are translated too.
+- Ships Crafting 1.9: its window, request cards and messages are translatable. The Traps windows follow next.
+
+v1.14.6.3:
+
+- Ships Axecleft's Crafting 1.8: spell requirements in the world's language.
+
+v1.14.6.2:
+
+- Axecleft's Tools 8.1: works with Babele 2.9 (Foundry 13/14), which keeps its translations in a new place; with it, translated compendium items are found by their English names again.
+
+v1.14.6.1
+
+- Added module update support
+
+v1.14.6:
+
+- **Worlds in other languages** (Babele-translated compendiums): the trap generator, poisons, trap kits and trap crafting find their items by English name, so they work with the French (and other) translations of this module's compendiums.
+  - Trap prices and Craft (trapmaking) DCs come from the SRD data by the trap's English name (and its CR, for traps sharing a name), or from translated notes ("Prix du marché", "Prix de vente", one price per CR).
+  - Magic traps are recognized from translated notes too.
+- Axecleft's Tools 8: in a world not in English, naming or renaming an item asks for its English name (optional; Skip / Don't ask again), and item sheets get an "English name" button, so items made in your language are recognized by the treasure, merchant and crafting tools.
+- Ships the Crafting engine 1.7.
+
+v1.14.5.1:
+
+- Ships the Crafting engine 1.6 (epic item rules for Axecleft's Armory and Curios; nothing changes for trap kits).
+
+v1.14.5:
+
+Renamed the module to "Axecleft's Traps, Poisons, and Diseases". The module ID and folder are unchanged (traps-and-poisons), so existing worlds and links keep working.
+
+Added a Random Trap Generator (GM only).
+
+- Generates random room traps for CR 1–20 using the same trap templates and value ranges as the d20srd.org Random Generator: 62 trap templates plus the SRD sample traps, about 74,000 possible combinations.
+- Each generated trap becomes a ready-to-use D35E trap actor built from this module's own trap attacks, poisons, condition buffs and timers. SRD sample traps are copied from the Traps compendium.
+- Open it from the "Axecleft's Tools" group (toolbox icon) on the left toolbar, the "Random Trap" button at the top of the Actors sidebar, or a macro:
+  game.modules.get("traps-and-poisons").api.openGenerator();
+- Options: CR, a specific trap or random, how many (1–10), include SRD sample traps, and create actors or post the stat lines to chat only.
+- "Customize…" opens a second window where you choose any of the trap's values yourself: type, trigger, reset, bypass, Search/Disable DCs, attack bonus, damage, save DCs, durations, area sizes and which poison. Boxes suggest the generator's values, but you can type anything. Anything left blank is rolled as usual. "Generate" stays fully random.
+- When posting to chat only, each trap has a "Create Actor" button that builds that exact trap. The button then becomes a link to the new actor.
+- Added the shared "Axecleft's Tools" toolbar group (scripts/axecleft-tools.js). Every Axecleft module that's active adds its tools to this one group.
+- Added a Diseases compendium with the 10 SRD diseases (blinding sickness, cackle fever, demon fever, devil chills, filth fever, mindfire, mummy rot, red ache, the shakes, slimy doom). They're built like the poison attacks: Fortitude save, Apply Disease, Incubation, Daily Damage, plus the SRD special effects (permanent blindness, permanent drain).
+- Added a "Diseased" buff to Common Trap Buffs. The disease attacks apply it.
+- Generated actors go in a "Random Traps" actor folder. A GM-only chat message lists them with links.
+
+Added poison and disease traps to the generator.
+
+- 13 new trap types built from the SRD trap-design rules (CR = the sum of the SRD CR modifiers): Poison Gas Trap, Spore Cloud Trap, Gas-Filled Pit Trap, Poisoned and Diseased Spiked Pit Traps, Envenomed and Diseased Needle Traps, Envenomed and Diseased Dart Traps, Poisoned Object (contact poison), Contaminated Object (contact disease), Tainted Food or Water, and Tainted Water-Filled Room (the SRD Water-Filled Room with an ingested poison or disease in the water).
+- Every SRD poison is used by the right delivery: inhaled poisons in gas traps, injury and contact poisons on spikes, needles and darts, contact poisons on objects, ingested poisons in food and water. Every SRD disease except mummy rot is used the same way.
+- The website's poisoned traps (arrow traps, guillotines, nets...) now use any injury or contact SRD poison within one CR of the website's original poison.
+- The main window has an "Include poison & disease traps" option. In Customize…, poison and disease traps get a choice for each option (poison or disease, depth, onset delay, attack bonus, DCs) with its CR modifier shown; website traps get a poison list.
+- CR modifiers the SRD doesn't give are the module's own: ingested poisons (striped toadstool +1, arsenic +1, id moss +2, oil of taggit +2, lich dust +3, dark reaver powder +4), drow poison +2, and diseases (filth fever and mindfire +1; cackle fever, red ache, the shakes, devil chills and blinding sickness +2; slimy doom +3; demon fever +4).
+- Added the missing Drow Poison to the Poisons compendium (Injury folder).
+- Fixed the disease attacks: their Diseased buff now gets its description (a stray ";" in the action cut it off).
+- Fixed poisons: Nitharit save DC (17 → 13), Sassone Leaf Residue secondary damage (3d6 → 1d6 Con), Insanity Mist initial damage (now Wis). Poison consumables now carry their poison's save DC, and the Insanity Mist, Oil of Taggit and Ungol Dust descriptions are corrected.
+- Disease incubation and the daily saves are tracked by the GM; the trap applies the disease when the target fails the first save.
+
+Added a Poison & Disease Creator (GM only), suggested by the community.
+
+- Open it from the "Axecleft's Tools" toolbar group (poison-drop icon) or a macro: game.modules.get("traps-and-poisons").api.openPoisonCreator();
+- Enter a name, delivery (contact, ingested, inhaled, injury), saving throw and DC, initial and secondary damage (poisons) or incubation, daily damage and recovery (diseases), price and notes.
+- Pick any existing poison or disease as a template to fill in the form, then change only what you need. Extra effects on the template (such as permanent blindness) can be kept or dropped.
+- Damage is typed the way the SRD writes it: "1d6 Con", "1d4 Con + 1d3 Wis", "1 Con drain", "2d12 hp", "unconsciousness 2d4 hours", "paralysis 2d6 minutes", "0". A preview shows what each part will do before you create it.
+- Poisons: initial damage on exposure, secondary damage 1 minute (10 rounds) later on a second failed save, then the poison ends (its Poisoned buff lasts 10 rounds; conditions it caused last their own duration). Incubation and recovery apply to diseases only.
+- Creates the attack ("Poison, Name" or "Disease, Name") and a consumable ("Name") whose action adds the attack to the user, like the module's poison consumables.
+- Both are saved in a world compendium, "Custom Poisons & Diseases" (created on first use), so module updates never overwrite them. Copies can also go in a "Custom Poisons & Diseases" Items folder. Creating one with the same name again replaces it.
+
+Added trap kits (mechanical traps you can carry, craft, set and recover).
+
+- A Trap Kit is a one-use item carrying a complete mechanical trap. Use it (the Use button on the character sheet), click where it goes on the scene, and the trap actor and its token are created there (actor folder "Placed Traps"). The kit is used up.
+- Where kits come from: the Crafting window (new "Trap kits" tab), or the GM right-clicks any trap actor in the Actors sidebar and chooses "Make Trap Kit" (Items folder "Trap Kits"). Mechanical traps only; magic traps remain the work of spellcasters.
+- Crafting (SRD, Craft (trapmaking)): any mechanical trap from your Actor compendiums (the SRD sample traps by default), and any trap actor in the world the crafter can see (show a Random Trap Generator trap to a player to let them craft it). Price: the SRD market price of the sample traps, or the SRD cost table (base 1,000 gp, trigger, reset, bypass, DCs, attack bonus, never miss, × CR; at least CR × 100 gp). Raw materials cost ⅓; poisons in the trap are bought at full price (×20 with an automatic reset). DC by CR (1–3 20, 4–6 25, 7–10 30; past CR 10, +5 per 3 CR), +5 for a proximity trigger, +5 for an automatic reset. Weekly progress as for any Craft item.
+- Settings (Configure Settings, this module):
+  - Trap kits: GM approves (on): setting or recovering a trap is a request the GM approves on its chat card.
+  - Trap kits: setting takes time (on): 1 minute per CR, shown on the chat card. The GM asks for any rolls.
+  - Trap kits: who sees a placed trap: GM only (hidden token); Everyone (visible token; the GM decides whether creatures spot it); or GM only, plus a marker (default) for the player who set it, who can show it to other players.
+  - Trap kits: placed traps can be recovered (on): an active trap can be packed back into a kit. 1 minute per CR and a Disable Device check against its Disable Device DC + 5. Success: the kit goes back to the character. Fail by 1–4: no harm, try again. Fail by 5–10: the trap is disabled and can't be recovered. Fail by more than 10: the trap is triggered on the character. Only active traps can be recovered; a trap with an automatic reset can be recovered again once it is active.
+  - Trap kits: compendiums for crafting: which Actor compendiums' traps can be crafted (blank: all).
+- Each placed trap has a status: Active, Disabled or Triggered. The GM changes it with a new button on the trap token's HUD (right-click the token) or in Placed Traps. Disabled traps are tinted grey, triggered ones red.
+- My Traps (Axecleft's Tools group, for players and the GM): the traps on the scene that you set or that were shown to you, with their status; Share shows your marker to other players; Recover packs a trap up (no need to select anything: you're asked which character if you have more than one). A trap you can see (Everyone visibility) can also be targeted to list it there. Players read the scene's list of placed traps, kept by the GM's client, so hidden traps and traps they have no permission on still show for their setter. Players only see the traps they know about (set, shown to them, or targeted), never every trap on the scene. The GM sees every placed trap, can change its status, pan to it, and set which players know about it (the eye button, for example after a successful Search).
+- Players' requests travel as chat messages that the GM's client carries out, so players never need permission to create actors or tokens.
+- Macro API: game.modules.get("traps-and-poisons").api: makeKit(actor), createKitItem(actor), openMyTraps(), placedTraps(scene), setStatus(token, status).
+
+Shared tools and treasure.
+
+- Ships the shared Crafting engine 1.5 (the Crafting window: Axecleft's Tools group) for the Trap kits tab, the same copy as Axecleft's Armory and Curios.
+- The shared "Axecleft's Tools" toolbar script is version 7, the same copy Axecleft's Gemstones, Armory and Curios ship (the newest copy runs). Foundry v11/v12 get the toolbar group's own canvas layer, so its buttons always show.
+- Random Trap Generator, Customize…: the suggestion lists on the value boxes now scroll and stay on screen (Foundry's own popup ran off the bottom of the screen). Double-click a box or press ↓ to see every suggestion; typing filters them; ↑ ↓ Enter and Esc work.
+- Poisons in random treasure and merchant stock: with any of Axecleft's treasure modules active (Gemstones, Armory or Curios), the Treasure Generator and Merchant Generator pull poison consumables straight from this module's Poison Consumables compendium (Item Sources tab; Generation settings → Poisons). Nothing else is needed in this module.
+
+v1.14.1:
+
+Added folders to organize the compendiums.
+
+Added consumable poison item support (suggested by @Landryan and @Gilgalad)
+
+Added roll tables for random trap selection
+
+Added roll tables for random poison consumables selection
+
+Bug fixes
+
+Reported by:  Status:   Bug:
+
+@Gilgalad     Fixed    Spiked pit trap CR3 : full attack not working
+
+@Gilgalad     Fixed    Compacting room CR7 : miss a 4 rounds timer
+
+@Gilgalad     Fixed    Spiked Pit Trap (100 Ft. Deep) : full attack not working (fall attack only not spikes, bad id i think)
+
+@Gilgalad     Pushed   Glyph of Warding (CR4 and 6) : no use of measure template (3 feet around)
+
+@Gilgalad     Fixed    Acid Fog trap CR 7 : no attack ?
+
+@Gilgalad     Fixed    Water-Filled Room CR 7 : 3 rounds timer instead 4 rounds
+
+@Gilgalad     Fixed    Destruction trap CR8 : action for dead condition doesn't work
+
+@Gilgalad     Fixed    Earthquake Trap CR 8 : idem for Open Ground Earthquake attack
+
+@Gilgalad     Fixed    Insanity Mist Vapor Trap CR 8 : miss a 1 round timer + here is a Dazed1 buff not used i think
+
+@Gilgalad     Fixed    Prismatic spray trap CR8 : Green beam, incorrect con damage special action (cha 1d1 instead con 1d6. I wonder if it's not a 20 hp damage ?)
+
+@Gilgalad     Fixed    Dropping Ceiling CR 9 : no delay 1 round delay
+
+@Gilgalad     Fixed    Incendiary cloud CR 9 : trap timer in items with no apparent interest
+
+@Axecleft     Fixed    Several icons and tokens that had broken links.
+
+@Gilgalad     Fixed    Incendiary cloud CR 9 : trap timer in items with no apparent interest
+
+@Axecleft     Fixed    Several icons and tokens that had broken links.

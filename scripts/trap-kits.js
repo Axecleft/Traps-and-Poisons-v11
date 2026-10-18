@@ -1,0 +1,685 @@
+/**
+ * Axecleft's Traps, Poisons, and Diseases — trap kits.
+ *
+ * A Trap Kit is a one-use consumable that carries a full copy of a mechanical trap actor. Using it (D35E's Use button)
+ * lets the player pick a spot on the scene; the GM approves (world setting) and the GM's client creates the trap actor
+ * (folder "Placed Traps") and its token. Setting takes 1 minute × CR (world setting).
+ *
+ * Who sees a placed trap (world setting): the GM only (hidden token); everyone (the GM decides whether creatures spot
+ * it); or the GM only plus a marker for the player who set it, who can share the marker with other players.
+ *
+ * Each placed trap has a status: active, disabled or triggered (GM: token HUD or My Traps). Recovery (world setting):
+ * an active trap can be packed back into a kit: 1 minute × CR and a Disable Device check against its Disable Device
+ * DC + 5. Success: the kit returns to the character. Fail by 1–4: no effect, try again. Fail by 5–10: the trap is
+ * disabled and can't be recovered. Fail by more than 10: the trap is triggered on the character.
+ *
+ * Players never change scene documents themselves: their requests are chat messages that the active GM's client
+ * carries out (after approval when the setting asks for it). No socket is needed.
+ *
+ * Macro API (game.modules.get("traps-and-poisons").api): makeKit(actorOrData), openMyTraps(), placedTraps(scene).
+ */
+import { trapData } from "./trap-generator.js";
+import { trapFacts, normName, enIndex, enName, t, N } from "./trap-pricing.js";
+
+const MOD = "traps-and-poisons";
+const PLACED_FOLDER = "Placed Traps";
+/** A kit's name (a pattern translated in lang/<code>.json; Axecleft's Tools 8.3 grammar). */
+const KIT_NAME = /*t*/"Trap Kit: {trap} (CR {cr})";
+const KIT_FOLDER = "Trap Kits";
+const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const H = (s, d) => esc(t(s, d));
+const STATUS = { active: /*t*/"Active", disabled: /*t*/"Disabled", triggered: /*t*/"Triggered" };
+const statusName = (s) => (STATUS[s] ? t(STATUS[s]) : s);
+/** "1 minute" / "5 minutes" in the world's language. */
+const minutes = (n) => t(n === 1 ? "{n} minute" : "{n} minutes", { n });
+const STATUS_TINT = { active: "#ffffff", disabled: "#8a8a8a", triggered: "#ff7070" };
+const STATUS_ICON = { active: "fas fa-circle-check", disabled: "fas fa-ban", triggered: "fas fa-bolt" };
+
+export const KIT_SETTINGS = {
+  kitApproval: { name: /*t*/"Trap kits: GM approves", hint: /*t*/"A player setting or recovering a trap sends a request that the GM approves on its chat card. Off: it happens at once.", type: Boolean, default: true },
+  kitSetTime: { name: /*t*/"Trap kits: setting takes time", hint: /*t*/"Setting a trap takes 1 minute per CR (shown on the chat card; game time isn't advanced). Off: traps are set at once. Recovering one always takes 1 minute per CR.", type: Boolean, default: true },
+  kitVisibility: { name: /*t*/"Trap kits: who sees a placed trap", hint: /*t*/"GM only: a hidden token. Everyone: a visible token (the GM decides whether creatures spot it). GM only, plus a marker: a hidden token, and the player who set it sees a marker that they can share with other players (My Traps).", type: String, default: "marker", choices: { gm: /*t*/"GM only", all: /*t*/"Everyone", marker: /*t*/"GM only, plus a marker for the player who set it" } },
+  kitRecovery: { name: /*t*/"Trap kits: placed traps can be recovered", hint: /*t*/"An active trap can be packed back into a kit: 1 minute per CR and a Disable Device check against its Disable Device DC + 5. Failing by 5–10 disables it for good; by more than 10 triggers it. Off: once placed, a trap stays until triggered or disabled.", type: Boolean, default: true },
+  kitPacks: { name: /*t*/"Trap kits: compendiums for crafting", hint: /*t*/"Actor compendiums whose mechanical traps can be crafted as kits, separated by commas (for example traps-and-poisons.traps). Blank: every compendium with trap actors.", type: String, default: "" },
+};
+const setting = (k) => { try { return game.settings.get(MOD, k); } catch (e) { return KIT_SETTINGS[k]?.default; } };
+
+/* -------------------------------------------- */
+/*  Facts, prices and kit items                 */
+/* -------------------------------------------- */
+
+let POISON_PRICES = null;
+async function poisonPrices() {
+  if (POISON_PRICES) return POISON_PRICES;
+  POISON_PRICES = new Map();
+  const pack = game.packs.get(`${MOD}.poison-consumables`);
+  try {
+    const idx = pack ? await enIndex(pack, { fields: ["system.price"] }) : [];
+    for (const e of idx) POISON_PRICES.set(normName(e.name), Number(e.system?.price) || 0); // English names (Babele)
+  } catch (e) { console.warn(`${MOD} | poison prices not loaded`, e); }
+  return POISON_PRICES;
+}
+
+/** The SRD facts for a trap actor (or its data): price, Craft DC, CR, DCs, whether it's mechanical. */
+export async function facts(actorOrData) {
+  const data = actorOrData?.toObject ? actorOrData.toObject() : actorOrData;
+  return trapFacts(data, await trapData(), { poisonPrices: await poisonPrices(), MOD });
+}
+
+/** Trap actor data as a kit carries it (no ids, folder, ownership or sort). */
+function cleanActor(data) {
+  const d = foundry.utils.deepClone(data);
+  delete d._id; delete d.folder; delete d.sort; delete d._stats; delete d.ownership;
+  for (const i of d.items ?? []) { delete i._stats; }
+  if (d.flags?.[MOD]?.placed) delete d.flags[MOD].placed;
+  return d;
+}
+
+/** Build the Trap Kit item data for a trap actor. */
+export async function makeKit(actorOrData, { price = null } = {}) {
+  const data = actorOrData?.toObject ? actorOrData.toObject() : foundry.utils.deepClone(actorOrData);
+  if (data?.type !== "trap") throw new Error(data?.name ? t("{name} is not a trap actor.", { name: data.name }) : t("That is not a trap actor."));
+  const f = await facts(data);
+  if (!f.mechanical) throw new Error(t("{name} is a magic trap; trap kits are for mechanical traps (magic traps come from spellcasting).", { name: data.name }));
+  const cr = f.cr || 1;
+  const value = price ?? f.price;
+  const notes = data.system?.details?.notes?.value ?? "";
+  const statLine = f.text ? `<p><em>${esc(f.text)}</em></p>` : "";
+  const desc = `<p><strong>${H("Trap kit.")}</strong> ${H("The parts of a ready-built {trap} (CR {cr}), packed to be set up somewhere else. Use it to choose where to set it.", { trap: data.name, cr })}</p>
+    ${statLine}
+    <p>Search DC ${f.search ?? "?"}; Disable Device DC ${f.disable ?? "?"}; ${esc(f.trigger ?? "")}; ${esc(f.reset ?? "")}.</p>
+    ${notes ? `<hr>${notes}` : ""}
+    <hr><p><em>${H("Setting it takes {time} (1 minute per CR). It can only be set once; a set trap can be packed up again only if the GM allows it (Disable Device DC {dc}).", { time: minutes(cr), dc: (f.disable ?? 20) + 5 })}</em></p>`;
+  return {
+    name: N(KIT_NAME, { trap: data.name, cr }),
+    type: "consumable",
+    img: data.img || "systems/D35E/icons/traps/generic.png",
+    system: {
+      consumableType: "misc", quantity: 1, weight: 10, price: value, identified: true,
+      actionType: "special", activation: { cost: cr, type: "minute" }, // D35E shows the Use button and "1 minute per CR"
+      uses: { value: 1, max: 1, per: "single" },
+      description: { value: desc, unidentified: "", chat: "" },
+    },
+    flags: { [MOD]: { kit: { actor: cleanActor(data), name: data.name, cr, price: value, text: f.text ?? null, search: f.search, disable: f.disable } }, world: { axecleftEn: N(KIT_NAME, { trap: enName(data), cr }, { lang: "en" }) } },
+  };
+}
+
+async function folderFor(name, type) {
+  return game.folders.find((f) => f.type === type && f.name === name) ?? Folder.create({ name, type, color: "#3b24f0" });
+}
+
+/** GM: make a kit item in the Items sidebar ("Trap Kits" folder) from a trap actor. */
+export async function createKitItem(actor) {
+  const data = await makeKit(actor);
+  const folder = await folderFor(KIT_FOLDER, "Item");
+  const item = await CONFIG.Item.documentClass.create({ ...data, folder: folder.id });
+  ui.notifications.info(t("{name} is in the \"{folder}\" Items folder.", { name: item.name, folder: KIT_FOLDER }));
+  return item;
+}
+
+/* -------------------------------------------- */
+/*  Requests (chat messages the GM carries out)  */
+/* -------------------------------------------- */
+
+const isActiveGM = () => game.user.isGM && (!game.users.activeGM || game.users.activeGM.isSelf);
+const reqOf = (m) => m?.flags?.[MOD]?.kitReq ?? null;
+const gmIds = () => ChatMessage.getWhisperRecipients("GM").map((u) => u.id);
+const needsApproval = (r) => ["place", "recover"].includes(r.type) && setting("kitApproval") && !game.users.get(r.userId)?.isGM;
+
+function requestTitle(r) {
+  return t({ place: /*t*/"Set a trap", recover: /*t*/"Recover a trap", share: /*t*/"Share a trap marker" }[r.type] ?? /*t*/"Trap kit");
+}
+function requestHtml(r) {
+  const who = r.actorName ?? game.users.get(r.userId)?.name ?? t("Someone");
+  const lines = [`<h3><i class="fas fa-dungeon"></i> ${esc(requestTitle(r))}</h3>`];
+  if (r.type === "place") {
+    lines.push(`<p>${H("{who} sets {trap} (CR {cr}) on {scene}.", { who, trap: "\u0001", cr: r.cr, scene: r.sceneName ?? t("the scene") }).replace("\u0001", `<strong>${esc(r.trapName)}</strong>`)}</p>`);
+    if (r.minutes) lines.push(`<p>${H("Setting it takes {time}.", { time: "\u0001" }).replace("\u0001", `<strong>${esc(minutes(r.minutes))}</strong>`)}</p>`);
+  }
+  if (r.type === "recover") {
+    lines.push(`<p>${H("{who} tries to pack up {trap} (CR {cr}): {time}.", { who, trap: "\u0001", cr: r.cr, time: minutes(r.minutes) }).replace("\u0001", `<strong>${esc(r.trapName)}</strong>`)}</p>`);
+    lines.push(`<p>${H("Disable Device {total} against DC {dc} (Disable Device DC {base} + 5).", { total: r.total, dc: r.dc, base: r.dc - 5 })}</p>`);
+    if (r.state === "pending") {
+      // What approving will do, so the GM sees the consequence before pressing Approve
+      const by = r.dc - r.total;
+      const what = by <= 0 ? H("success: the trap goes back into a kit")
+        : by <= 4 ? H("failed by {n}: no effect, the trap stays set", { n: by })
+        : by <= 10 ? H("failed by {n}: the trap is disabled for good", { n: by })
+        : `<strong style="color:#c00">${H("failed by {n}: the trap is TRIGGERED on {who}", { n: by, who })}</strong>`;
+      lines.push(`<p><em>${H("If approved:")}</em> ${what}.</p>`);
+    }
+  }
+  if (r.type === "share") lines.push(`<p>${H("{who} shows {trap} to {users}.", { who, trap: r.trapName, users: (r.users ?? []).map((u) => game.users.get(u)?.name ?? "?").join(", ") || t("nobody") })}</p>`);
+  if (r.state === "pending") lines.push(`<p class="tp-kit-state"><em>${H("Waiting for the GM.")}</em></p><div class="tp-kit-gm" style="display:flex;gap:4px"><button type="button" data-kit="approve"><i class="fas fa-check"></i> ${H("Approve")}</button><button type="button" data-kit="deny"><i class="fas fa-xmark"></i> ${H("Cancel")}</button></div>`);
+  if (r.state === "done") lines.push(`<p class="tp-kit-state"><strong>${r.result ?? H("Done.")}</strong></p>`);
+  if (r.state === "cancelled") lines.push(`<p class="tp-kit-state"><em>${esc(r.result ?? t("Cancelled by the GM."))}</em></p>`);
+  if (r.state === "failed") lines.push(`<p class="tp-kit-state"><strong>${H("Not done:")}</strong> ${esc(r.result ?? "")}</p>`);
+  return lines.join("");
+}
+
+async function postRequest(r) {
+  r.state = "pending";
+  r.userId ??= game.user.id;
+  const msg = await ChatMessage.create({
+    content: requestHtml(r), speaker: { alias: t("Trap Kits") },
+    whisper: [...new Set([...gmIds(), game.user.id])],
+    flags: { [MOD]: { kitReq: r } },
+  });
+  // The GM acting alone (or a request that needs no approval) is carried out by the GM's client from createChatMessage
+  return msg;
+}
+
+async function saveRequest(message, r) {
+  await message.update({ content: requestHtml(r), [`flags.${MOD}.kitReq`]: r });
+}
+
+async function carryOut(message) {
+  const r = foundry.utils.deepClone(reqOf(message));
+  if (!r || r.state !== "pending") return;
+  r.state = "working";
+  await message.update({ [`flags.${MOD}.kitReq.state`]: "working" });
+  try {
+    if (r.type === "place") r.result = await doPlace(r);
+    else if (r.type === "recover") r.result = await doRecover(r);
+    else if (r.type === "share") r.result = await doShare(r);
+    r.state = "done";
+  } catch (err) {
+    console.error(`${MOD} | trap kit request failed`, err, r);
+    r.state = "failed";
+    r.result = err.message;
+    ui.notifications?.error(t("Trap kit: {error}", { error: err.message }));
+  }
+  await saveRequest(message, r);
+}
+
+function onCreateMessage(message) {
+  const r = reqOf(message);
+  if (!r || r.state !== "pending" || !isActiveGM()) return;
+  if (!needsApproval(r)) carryOut(message);
+}
+
+function onRenderMessage(message, html) {
+  const r = reqOf(message);
+  const root = html instanceof HTMLElement ? html : html?.[0];
+  root?.querySelectorAll?.(".tp-kit-trigger").forEach((b) => {
+    if (!game.user.isGM) return b.remove();
+    b.addEventListener("click", async (ev) => {
+      ev.preventDefault();
+      const tok = await fromUuid(b.dataset.token);
+      const victim = b.dataset.victim ? await fromUuid(b.dataset.victim) : null;
+      if (victim?.object) { victim.object.setTarget(true, { releaseOthers: true }); canvas.animatePan({ x: victim.x, y: victim.y }); }
+      else if (b.dataset.victim) ui.notifications.warn(t("That character's token isn't on this scene; target it yourself."));
+      tok?.actor?.sheet?.render(true);
+    });
+  });
+  if (!r || !root) return;
+  root.querySelectorAll(".tp-kit-gm").forEach((box) => {
+    if (!game.user.isGM || r.state !== "pending") return box.remove();
+    box.querySelector('[data-kit="approve"]')?.addEventListener("click", (ev) => { ev.preventDefault(); carryOut(message); });
+    box.querySelector('[data-kit="deny"]')?.addEventListener("click", async (ev) => {
+      ev.preventDefault();
+      const r2 = { ...reqOf(message), state: "cancelled", result: t("Cancelled by the GM.") };
+      await saveRequest(message, r2);
+    });
+  });
+}
+
+/* -------------------------------------------- */
+/*  Setting a trap                              */
+/* -------------------------------------------- */
+
+/** Let the user click a spot on the scene. Resolves { x, y } (top-left of the grid square) or null. */
+function pickPoint() {
+  return new Promise((resolve) => {
+    const stage = canvas?.stage;
+    if (!stage) return resolve(null);
+    ui.notifications.info(t("Click where to set the trap. Right-click or Esc cancels."));
+    const finish = (v) => { stage.off("pointerdown", down); document.removeEventListener("keydown", key, true); resolve(v); };
+    const down = (ev) => {
+      if (ev.button === 2) return finish(null);
+      if (ev.button !== 0) return;
+      const p = typeof ev.getLocalPosition === "function" ? ev.getLocalPosition(stage) : ev.data?.getLocalPosition(stage);
+      if (!p) return finish(null);
+      let tl = null;
+      try { tl = canvas.grid.getTopLeftPoint?.(p) ?? null; } catch (e) { tl = null; }
+      if (!tl) { try { const [x, y] = canvas.grid.getTopLeft(p.x, p.y); tl = { x, y }; } catch (e) { tl = { x: p.x, y: p.y }; } }
+      finish({ x: Math.round(tl.x), y: Math.round(tl.y) });
+    };
+    const key = (e) => { if (e.key === "Escape") { e.stopPropagation(); finish(null); } };
+    stage.on("pointerdown", down);
+    document.addEventListener("keydown", key, true);
+  });
+}
+
+/** The player used a kit: pick the spot and send the request. */
+export async function useKit(item, actor) {
+  const kit = item?.flags?.[MOD]?.kit;
+  if (!kit) return;
+  if (!canvas?.scene) return ui.notifications.warn(t("Open the scene where the trap goes first."));
+  if ((Number(item.system?.quantity ?? 1) || 0) < 1) return ui.notifications.warn(t("{name} is used up.", { name: item.name }));
+  const sheet = actor?.sheet;
+  const wasOpen = sheet?.rendered;
+  try { if (wasOpen) sheet.minimize?.(); } catch (e) { /* ignore */ }
+  const pt = await pickPoint();
+  try { if (wasOpen) sheet.maximize?.(); } catch (e) { /* ignore */ }
+  if (!pt) return;
+  const cr = Number(kit.cr) || 1;
+  await postRequest({
+    type: "place", actorUuid: actor.uuid, actorName: actor.name, itemId: item.id, trapName: kit.name, cr,
+    sceneId: canvas.scene.id, sceneName: canvas.scene.name, x: pt.x, y: pt.y, minutes: setting("kitSetTime") ? cr : 0,
+  });
+  if (setting("kitApproval") && !game.user.isGM) ui.notifications.info(t("The GM has your request to set {trap}.", { trap: kit.name }));
+}
+
+async function doPlace(r) {
+  const scene = game.scenes.get(r.sceneId);
+  if (!scene) throw new Error(t("That scene no longer exists."));
+  const owner = await fromUuid(r.actorUuid);
+  const item = owner?.items?.get(r.itemId);
+  const kit = item?.flags?.[MOD]?.kit;
+  if (!kit) throw new Error(owner?.name ? t("The trap kit is no longer in {name}'s inventory.", { name: owner.name }) : t("The trap kit is no longer in the character's inventory."));
+  if ((Number(item.system?.quantity ?? 1) || 0) < 1) throw new Error(t("{name} is used up.", { name: item.name }));
+  const folder = await folderFor(PLACED_FOLDER, "Actor");
+  const data = foundry.utils.deepClone(kit.actor);
+  data.folder = folder.id;
+  data.ownership = { default: 0 };
+  foundry.utils.setProperty(data, `flags.${MOD}.fromKit`, { price: kit.price, name: kit.name, cr: kit.cr, text: kit.text });
+  // Search and Disable Device DCs: on the sheet and in the token's two bars, as on the module's own trap actors
+  const det = (data.system ??= {}).details ??= {};
+  if (!(Number(det.findDC) > 1) && kit.search) det.findDC = kit.search;
+  if (!(Number(det.disarmDC) > 1) && kit.disable) det.disarmDC = kit.disable;
+  const bars = { displayBars: data.prototypeToken?.displayBars || CONST.TOKEN_DISPLAY_MODES.OWNER_HOVER, bar1: { attribute: "details.findDC" }, bar2: { attribute: "details.disarmDC" } };
+  data.prototypeToken = { ...(data.prototypeToken ?? {}), ...bars, name: data.name };
+  const trap = await CONFIG.Actor.documentClass.create(data);
+  // D35E may reset a new actor's token settings: put the bars back if it did
+  if (trap.prototypeToken?.bar1?.attribute !== "details.findDC" || trap.prototypeToken?.bar2?.attribute !== "details.disarmDC") await trap.update({ prototypeToken: bars });
+  const vis = setting("kitVisibility");
+  const td = (await trap.getTokenDocument({ x: r.x, y: r.y, hidden: vis !== "all", actorLink: true })).toObject();
+  Object.assign(td, foundry.utils.deepClone(bars));
+  td.name = trap.name; // the trap's own name (a token can carry an older name from the actor it was copied from)
+  foundry.utils.setProperty(td, `flags.${MOD}.placed`, {
+    by: r.userId, byActor: r.actorUuid, byName: r.actorName, status: "active", seenBy: vis === "marker" ? [r.userId] : [],
+    at: Date.now(), cr: kit.cr, price: kit.price, disable: kit.disable ?? trap.system?.details?.disarmDC ?? null,
+  });
+  await scene.createEmbeddedDocuments("Token", [td]);
+  // The kit is used up
+  const q = Number(item.system?.quantity ?? 1) || 1;
+  if (q > 1) await item.update({ "system.quantity": q - 1 }); else await item.delete();
+  const seen = vis === "gm" ? H("Only the GM sees it.") : vis === "all" ? H("Everyone can see it; the GM decides whether creatures spot it.")
+    : H("Only the GM sees it; {player} sees a marker (My Traps can share it).", { player: game.users.get(r.userId)?.name ?? t("the player") });
+  return `${r.minutes ? H("{trap} is set ({time} of work).", { trap: kit.name, time: minutes(r.minutes) }) : H("{trap} is set.", { trap: kit.name })} ${seen}`;
+}
+
+/* -------------------------------------------- */
+/*  Status, sharing and recovery                */
+/* -------------------------------------------- */
+
+const placedOf = (t) => t?.flags?.[MOD]?.placed ?? null;
+
+/**
+ * 1.14.6.13: a trap the GM puts on a scene by hand (dragged from the Actors sidebar or a compendium) is a placed trap
+ * too, so it gets the same controls as one set from a kit: its status on the token HUD and in Placed Traps, the eye
+ * (which players know about it) and, for mechanical traps, recovery into a kit.
+ */
+async function adoptTrap(token) {
+  if (!game.user?.isGM || !token || placedOf(token) || token.actor?.type !== "trap") return;
+  const d = token.actor.system?.details ?? {};
+  let magic = false;
+  try { magic = !(await facts(token.actor)).mechanical; } catch (e) { magic = false; }
+  await token.setFlag(MOD, "placed", { magic, by: game.user.id, byActor: null, byName: game.user.name, status: "active", seenBy: [], at: Date.now(),
+    cr: Number(d.cr) || null, price: null, disable: Number(d.disarmDC) > 1 ? Number(d.disarmDC) : null, gm: true });
+}
+/** Every hand-placed trap token on a scene (the GM's client, when the scene opens). */
+async function adoptScene(scene) {
+  if (!game.user?.isGM || !scene) return;
+  for (const t of scene.tokens?.contents ?? []) {
+    try {
+      if (!placedOf(t) && t.actor?.type === "trap") await adoptTrap(t);
+      // Hand-placed traps marked before 1.14.6.16: record whether they are magic (magic traps can't be recovered)
+      else if (placedOf(t)?.gm && typeof placedOf(t).magic !== "boolean" && t.actor) await t.setFlag(MOD, "placed", { ...placedOf(t), magic: !(await facts(t.actor)).mechanical });
+    } catch (e) { console.warn("Traps | could not mark a placed trap", e); }
+  }
+}
+const entryOf = (t) => ({ id: t.id, uuid: t.uuid, name: t.name, x: t.x, y: t.y, width: t.width || 1, height: t.height || 1, img: t.texture?.src ?? null, hidden: !!t.hidden, placed: placedOf(t) });
+
+/*
+ * The scene's list of placed traps (flags.traps-and-poisons.traps), kept by the GM's client. Players read it instead of
+ * the trap tokens themselves, which they may not be able to see or select (hidden tokens, no permission on the actor).
+ */
+const syncTimers = new Map();
+function syncRegistry(scene) {
+  if (!scene || !isActiveGM()) return;
+  clearTimeout(syncTimers.get(scene.id));
+  syncTimers.set(scene.id, setTimeout(async () => {
+    const now = {};
+    for (const t of scene.tokens.contents) if (placedOf(t)) now[t.id] = entryOf(t);
+    const old = scene.flags?.[MOD]?.traps ?? {};
+    const update = {};
+    for (const id of Object.keys(old)) if (!now[id]) update[`flags.${MOD}.traps.-=${id}`] = null;
+    for (const [id, e] of Object.entries(now)) if (JSON.stringify(old[id]) !== JSON.stringify(e)) update[`flags.${MOD}.traps.${id}`] = e;
+    if (Object.keys(update).length) await scene.update(update);
+  }, 200));
+}
+
+/** Placed traps on a scene: [{ id, uuid, name, x, y, width, height, img, hidden, placed }] (tokens, plus the scene's list for players). */
+export function placedTraps(scene = canvas?.scene) {
+  const out = new Map();
+  for (const e of Object.values(scene?.flags?.[MOD]?.traps ?? {})) if (e?.placed) out.set(e.id, e);
+  for (const t of scene?.tokens?.contents ?? []) if (placedOf(t)) out.set(t.id, entryOf(t));
+  return [...out.values()];
+}
+
+/** GM: set a placed trap's status (active, disabled, triggered). */
+export async function setStatus(token, status) {
+  const doc = token?.document ?? token;
+  if (!game.user.isGM || !placedOf(doc) || !STATUS[status]) return;
+  await doc.update({ [`flags.${MOD}.placed.status`]: status, "texture.tint": STATUS_TINT[status] });
+}
+
+async function doShare(r) {
+  const token = await fromUuid(r.tokenUuid);
+  const p = placedOf(token);
+  if (!p) throw new Error(t("That trap is gone."));
+  const seen = [...new Set([...(p.seenBy ?? []), ...(r.users ?? [])])];
+  await token.update({ [`flags.${MOD}.placed.seenBy`]: seen });
+  return H("The marker for {trap} is shown to {users}.", { trap: token.name, users: (r.users ?? []).map((u) => game.users.get(u)?.name ?? "?").join(", ") });
+}
+
+/** The character recovering a trap: the only character the user owns, or the one they pick (their selected token's or assigned character first). */
+async function recoveringActor() {
+  // The character on the scene first (1.14.6.14): an unlinked token has its own copy of the actor, with its own skills
+  const sceneActors = (canvas?.tokens?.placeables ?? []).filter((x) => x.actor?.isOwner && x.actor.type === "character").map((x) => x.actor);
+  const controlled = canvas?.tokens?.controlled?.find((x) => x.actor?.isOwner)?.actor ?? null;
+  const own = game.user.character ? sceneActors.find((a) => (a.isToken ? a.token?.actorId : a.id) === game.user.character.id) ?? game.user.character : null;
+  const first = controlled ?? own ?? null;
+  if (game.user.isGM) return first;
+  const owned = (game.actors?.contents ?? [...(game.actors ?? [])]).filter((a) => a.isOwner && a.type === "character");
+  // One entry per character: the token's copy when it is on the scene, else the sidebar actor
+  const list = [];
+  const seen = new Set();
+  for (const a of [first, ...sceneActors, ...owned].filter(Boolean)) {
+    const base = a.isToken ? a.token?.actorId : a.id;
+    if (seen.has(base)) continue;
+    seen.add(base);
+    list.push(a);
+  }
+  if (list.length <= 1) return list[0] ?? null;
+  const DialogV2 = (globalThis.AxecleftTools?.DialogV2 ?? foundry.applications.api.DialogV2);
+  const pick = await DialogV2.wait({
+    window: { title: t("Who recovers the trap?"), icon: "fas fa-box" }, rejectClose: false,
+    content: `<div class="form-group"><label>${H("Character")}</label><select name="who">${list.map((a, i) => `<option value="${i}">${esc(a.name)}</option>`).join("")}</select></div>`,
+    buttons: [{ action: "ok", label: t("Recover"), icon: "fas fa-box", default: true, callback: (ev, button) => button.form.elements.who.value }, { action: "cancel", label: t("Cancel") }],
+  });
+  return pick != null && pick !== "cancel" ? list[Number(pick)] ?? null : null;
+}
+
+/** Is a placed trap magic? (the flag set when it was placed; else worked out from its actor) */
+async function isMagicPlaced(tokenDoc, p) {
+  if (typeof p?.magic === "boolean") return p.magic;
+  const actor = tokenDoc?.actor ?? (tokenDoc?.uuid ? (await fromUuid(tokenDoc.uuid))?.actor : null);
+  if (!actor) return false;
+  try { return !(await facts(actor)).mechanical; } catch (e) { return false; }
+}
+
+/** Try to pack a placed trap back into a kit. entry: from placedTraps() (or a trap token). */
+export async function recover(entry) {
+  const tokenDoc = entry?.document ?? entry;
+  const p = tokenDoc?.placed ?? placedOf(tokenDoc);
+  if (!p) return;
+  if (!setting("kitRecovery")) return ui.notifications.warn(t("The GM doesn't allow placed traps to be recovered."));
+  if (p.status !== "active") return ui.notifications.warn(t("{trap} is {status}; only active traps can be recovered.", { trap: tokenDoc.name, status: statusName(p.status).toLowerCase() }));
+  // Only mechanical traps go back into a kit (1.14.6.16): a magic trap is a spell, not parts to pack up
+  if (await isMagicPlaced(tokenDoc, p)) return ui.notifications.warn(t("{trap} is a magic trap; only mechanical traps can be packed back into a kit (disable it with Disable Device instead).", { trap: tokenDoc.name }));
+  const actor = await recoveringActor();
+  if (!actor) return ui.notifications.warn(t("You have no character to recover the trap with."));
+  const dev = actor.system?.skills?.dev ?? {};
+  if (!((Number(dev.rank) || 0) > 0)) return ui.notifications.warn(t("{name} has no ranks in Disable Device (trained only).", { name: actor.name }));
+  const disable = Number(p.disable) || 20;
+  const dc = disable + 5;
+  // D35E's own Disable Device roll (1.14.6.14): every bonus the sheet shows (ranks, ability, feats, items, buffs), and its
+  // dialog for situational modifiers. Taking 20 isn't allowed: failing has a cost.
+  let total = null;
+  if (typeof actor.rollSkill === "function") {
+    try {
+      const roll = await actor.rollSkill("dev", { target: dc });
+      total = Number(roll?.total ?? roll?._total);
+      if (!Number.isFinite(total)) return; // dialog closed
+      if (!(roll?.dice?.length > 0) && /\b20\b/.test(String(roll?.formula ?? ""))) return ui.notifications.warn(t("You can't take 20 to recover a trap: failing can disable or trigger it. Roll or take 10."));
+    } catch (e) { console.warn("Traps | D35E skill roll failed, rolling by hand", e); total = null; }
+  }
+  if (!Number.isFinite(total)) {
+    const bonus = Number((actor.sourceDetails?.["system.skills.dev.changeBonus"] ?? []).reduce((a, d) => a + (Number(d?.value) || 0), 0)) || Number(dev.mod) || 0;
+    const roll = await new Roll(`1d20 + ${bonus}`).evaluate();
+    await roll.toMessage({ speaker: ChatMessage.getSpeaker({ actor }), flavor: t("Disable Device: recover {trap} (DC {dc})", { trap: tokenDoc.name, dc }) });
+    total = roll.total;
+  }
+  const cr = Number(p.cr) || 1;
+  await postRequest({ type: "recover", tokenUuid: tokenDoc.uuid, actorUuid: actor.uuid, actorName: actor.name, trapName: tokenDoc.name, cr, minutes: cr, total, dc });
+}
+
+async function doRecover(r) {
+  const token = await fromUuid(r.tokenUuid);
+  const p = placedOf(token);
+  if (!p) throw new Error(t("That trap is gone."));
+  if (p.status !== "active") throw new Error(t("{trap} is {status}; only active traps can be recovered.", { trap: token.name, status: statusName(p.status).toLowerCase() }));
+  const by = r.dc - r.total;
+  if (by <= 0) {
+    const who = await fromUuid(r.actorUuid);
+    if (!who) throw new Error(t("The recovering character no longer exists."));
+    const kit = await makeKit(token.actor, { price: p.price ?? null });
+    await who.createEmbeddedDocuments("Item", [kit]);
+    await token.delete();
+    return H("Success: {who} packs {trap} back into a trap kit.", { who: who.name, trap: token.name });
+  }
+  if (by <= 4) return H("Failed by {n}: no harm done; the trap is still set and can be tried again.", { n: by });
+  if (by <= 10) { await setStatus(token, "disabled"); return H("Failed by {n}: {trap} is disabled and can no longer be recovered.", { n: by, trap: token.name }); }
+  await setStatus(token, "triggered");
+  await postTriggered(token, r);
+  return H("Failed by {n}: {trap} is {triggered} on {who}! (See the GM's Trap Triggered card.)", { n: by, trap: token.name, triggered: "\u0001", who: r.actorName }).replace("\u0001", `<span style="color:#c00">${H("triggered")}</span>`);
+}
+
+/** A GM-only card when a recovery sets a trap off: its attacks, and a button that targets the victim and opens the trap. */
+async function postTriggered(token, r) {
+  const trap = token.actor;
+  const attacks = (trap?.items?.contents ?? [...(trap?.items ?? [])]).filter((i) => ["attack", "full-attack"].includes(i.type)).map((i) => i.name);
+  const victim = canvas?.scene?.id === token.parent?.id ? canvas.tokens?.placeables?.find((t) => t.actor?.uuid === r.actorUuid || t.document?.actorId === r.actorUuid.split(".").pop()) : null;
+  await ChatMessage.create({
+    speaker: { alias: t("Trap Kits") }, whisper: gmIds(),
+    content: `<h3 style="color:#c00"><i class="fas fa-bolt"></i> ${H("Trap triggered")}</h3>
+      <p>${H("{trap} goes off on {who} while they try to pack it up (failed by {n}).", { trap: "\u0001", who: "\u0002", n: r.dc - r.total }).replace("\u0001", `<strong>${esc(token.name)}</strong>`).replace("\u0002", `<strong>${esc(r.actorName)}</strong>`)}</p>
+      ${attacks.length ? `<p>${H("Its attacks: {attacks}.", { attacks: attacks.join(", ") })}</p>` : `<p>${H("It has no attack items; resolve it from its notes.")}</p>`}
+      <button type="button" class="tp-kit-trigger" data-token="${esc(token.uuid)}" data-victim="${esc(victim?.document?.uuid ?? "")}"><i class="fas fa-crosshairs"></i> ${H("Target {who} and open the trap", { who: r.actorName })}</button>
+      <p class="hint"><small>${H("The trap stays Triggered until you set it Active again (its token HUD or Placed Traps), for example once it resets.")}</small></p>`,
+    flags: { [MOD]: { kitTriggered: true } },
+  });
+}
+
+/** Deleting a placed trap's token removes the actor that was made for it ("Placed Traps" folder) too. */
+async function onDeleteToken(token) {
+  if (!placedOf(token) || !isActiveGM()) return;
+  const actor = game.actors.get(token.actorId);
+  if (!actor?.flags?.[MOD]?.fromKit) return; // only actors made for a placed kit
+  const stillUsed = game.scenes.some((s) => s.tokens.some((t) => t.actorId === actor.id));
+  if (!stillUsed) await actor.delete();
+}
+
+/* -------------------------------------------- */
+/*  Markers (players)                           */
+/* -------------------------------------------- */
+
+let markerLayer = null, markerTimer = null;
+function scheduleMarkers() { clearTimeout(markerTimer); markerTimer = setTimeout(drawMarkers, 100); }
+async function drawMarkers() {
+  if (!canvas?.ready) return;
+  if (markerLayer) { markerLayer.destroy({ children: true }); markerLayer = null; }
+  if (game.user.isGM || setting("kitVisibility") !== "marker") return;
+  markerLayer = new PIXI.Container();
+  markerLayer.eventMode = "none";
+  (canvas.interface ?? canvas.stage).addChild(markerLayer);
+  const load = foundry.canvas?.loadTexture ?? globalThis.loadTexture;
+  for (const tr of placedTraps()) {
+    const p = tr.placed;
+    if (!tr.hidden || !(p.seenBy ?? []).includes(game.user.id)) continue;
+    const w = (tr.width || 1) * canvas.grid.size, h = (tr.height || 1) * canvas.grid.size;
+    try {
+      const tex = tr.img ? await load(tr.img) : null;
+      if (tex) { const s = new PIXI.Sprite(tex); Object.assign(s, { x: tr.x, y: tr.y, width: w, height: h, alpha: 0.5 }); markerLayer?.addChild(s); }
+    } catch (e) { /* no image: the frame still shows */ }
+    const color = { active: 0xffb000, disabled: 0x8a8a8a, triggered: 0xff4040 }[p.status] ?? 0xffb000;
+    const g = new PIXI.Graphics();
+    if (typeof g.setStrokeStyle === "function") g.rect(tr.x + 2, tr.y + 2, w - 4, h - 4).stroke({ width: 3, color, alpha: 0.9 });
+    else g.lineStyle(3, color, 0.9).drawRect(tr.x + 2, tr.y + 2, w - 4, h - 4);
+    markerLayer?.addChild(g);
+    const label = new PIXI.Text(`${tr.name}${p.status !== "active" ? ` (${statusName(p.status)})` : ""}`, { fontSize: Math.max(10, canvas.grid.size / 5), fill: 0xffffff, stroke: 0x000000, strokeThickness: 3 });
+    Object.assign(label, { x: tr.x, y: tr.y + h + 2 });
+    markerLayer?.addChild(label);
+  }
+}
+
+/* -------------------------------------------- */
+/*  My Traps window                             */
+/* -------------------------------------------- */
+
+export async function openMyTraps() {
+  if (!canvas?.scene) return ui.notifications.warn(t("Open a scene first."));
+  const gm = game.user.isGM;
+  // Targeted trap tokens count too (any trap the player can see and target, e.g. with "Everyone" visibility)
+  const targeted = new Set([...(game.user.targets ?? [])].map((t) => t.document?.id ?? t.id));
+  // Players see only traps they know: set by them, shown to them (another player or the GM), or targeted
+  const list = placedTraps().filter((e) => gm || e.placed.by === game.user.id || (e.placed.seenBy ?? []).includes(game.user.id) || targeted.has(e.id))
+    .sort((a, b) => (targeted.has(b.id) ? 1 : 0) - (targeted.has(a.id) ? 1 : 0) || a.name.localeCompare(b.name));
+  const players = game.users.filter((u) => !u.isGM && u.id !== game.user.id);
+  const rows = list.map((x) => {
+    const p = x.placed;
+    const by = esc(p.byName ?? game.users.get(p.by)?.name ?? "?");
+    const status = gm ? `<select data-status="${x.id}">${Object.keys(STATUS).map((k) => `<option value="${k}"${k === p.status ? " selected" : ""}>${esc(statusName(k))}</option>`).join("")}</select>`
+      : `<i class="${STATUS_ICON[p.status] ?? ""}"></i> ${esc(statusName(p.status))}`;
+    const canShare = !gm && setting("kitVisibility") === "marker" && ((p.seenBy ?? []).includes(game.user.id)) && players.length;
+    const canRecover = setting("kitRecovery") && p.status === "active" && !gm && p.magic !== true;
+    return `<tr><td>${esc(x.name)}${targeted.has(x.id) ? ` <i class="fas fa-crosshairs" title="${H("Targeted")}"></i>` : ""}</td><td>${p.cr ?? "?"}</td><td>${by}</td><td>${status}</td><td style="white-space:nowrap">
+      ${canShare ? `<button type="button" data-share="${x.id}" title="${H("Show its marker to other players")}"><i class="fas fa-share-nodes"></i></button>` : ""}
+      ${canRecover ? `<button type="button" data-recover="${x.id}" title="${H("Pack it back into a kit (Disable Device DC {dc})", { dc: (Number(p.disable) || 20) + 5 })}"><i class="fas fa-box"></i></button>` : ""}
+      ${gm ? `<button type="button" data-known="${x.id}" title="${H("Players who know about it: {players}", { players: (p.seenBy ?? []).map((u) => game.users.get(u)?.name).filter(Boolean).join(", ") || t("only the one who set it") })}"><i class="fas fa-eye"></i></button>` : ""}
+      ${gm ? `<button type="button" data-pan="${x.id}" title="${H("Show on the scene")}"><i class="fas fa-location-crosshairs"></i></button>` : ""}</td></tr>`;
+  }).join("");
+  // GM: which players know about a trap (found it with Search, were told, ...)
+  const allPlayers = game.users.filter((u) => !u.isGM);
+  const knownBox = gm && allPlayers.length ? `<div data-knownbox style="display:none;margin-top:6px"><p class="hint">${H(setting("kitVisibility") === "marker" ? "Players who know about {trap} (it shows in their My Traps, with a marker):" : "Players who know about {trap} (it shows in their My Traps):", { trap: "\u0001" }).replace("\u0001", "<strong data-known-name></strong>")}</p>${allPlayers.map((u) => `<label style="display:block"><input type="checkbox" value="${u.id}"> ${esc(u.name)}${u.character ? ` (${esc(u.character.name)})` : ""}</label>`).join("")}<button type="button" data-known-save><i class="fas fa-eye"></i> ${H("Save")}</button></div>` : "";
+  const shareBox = players.length ? `<div data-sharebox style="display:none;margin-top:6px"><p class="hint">${H("Show the marker to:")}</p>${players.map((u) => `<label style="display:block"><input type="checkbox" value="${u.id}"> ${esc(u.name)}${u.character ? ` (${esc(u.character.name)})` : ""}</label>`).join("")}<button type="button" data-share-send><i class="fas fa-share-nodes"></i> ${H("Share")}</button></div>` : "";
+  const content = `<p class="hint">${H(gm ? "Traps set from trap kits on this scene. Change a trap's status here or on its token (right-click, token HUD). The eye sets which players know about a trap (for example after a successful Search); players only see the traps they know." : "Traps on this scene that you know about: you set them, someone showed them to you, or you have them targeted.")}</p>
+    ${list.length ? `<table><thead><tr><th>${H("Trap")}</th><th>CR</th><th>${H("Set by")}</th><th>${H("Status")}</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : `<p><em>${H("None.")}</em></p>`}
+    ${shareBox}
+    ${knownBox}
+    ${!gm && setting("kitRecovery") ? `<p class="hint">${H("Recovering: press the box next to the trap (you'll be asked which character if you have more than one). It takes 1 minute per CR and a Disable Device check against its Disable Device DC + 5. A trap you can see can also be targeted (T) to list it here.")}</p>` : ""}`;
+  const DialogV2 = (globalThis.AxecleftTools?.DialogV2 ?? foundry.applications.api.DialogV2);
+  let shareFor = null;
+  await DialogV2.wait({
+    window: { title: t(gm ? "Placed Traps" : "My Traps"), icon: "fas fa-dungeon" },
+    position: { width: 520 },
+    content, rejectClose: false,
+    buttons: [{ action: "close", label: t("Close"), default: true }],
+    render: (event, dialog) => {
+      const root = (dialog ?? event?.target)?.element ?? document;
+      const tok = (id) => canvas.scene.tokens.get(id);
+      const ent = (id) => list.find((e) => e.id === id);
+      root.querySelectorAll("[data-status]").forEach((s) => s.addEventListener("change", () => setStatus(tok(s.dataset.status), s.value)));
+      root.querySelectorAll("[data-pan]").forEach((b) => b.addEventListener("click", () => { const t = tok(b.dataset.pan); if (t) canvas.animatePan({ x: t.x, y: t.y }); }));
+      root.querySelectorAll("[data-recover]").forEach((b) => b.addEventListener("click", async () => { b.disabled = true; await recover(ent(b.dataset.recover)); }));
+      let knownFor = null;
+      root.querySelectorAll("[data-known]").forEach((b) => b.addEventListener("click", () => {
+        knownFor = b.dataset.known;
+        const e = ent(knownFor);
+        const box = root.querySelector("[data-knownbox]");
+        if (!e || !box) return;
+        box.querySelector("[data-known-name]").textContent = e.name;
+        box.querySelectorAll("input").forEach((x) => { x.checked = (e.placed.seenBy ?? []).includes(x.value) || e.placed.by === x.value; x.disabled = e.placed.by === x.value; });
+        box.style.display = "";
+      }));
+      root.querySelector("[data-known-save]")?.addEventListener("click", async () => {
+        const e = ent(knownFor), tk = tok(knownFor);
+        if (!e || !tk) return;
+        const users = [...root.querySelectorAll("[data-knownbox] input:checked")].map((x) => x.value);
+        const seen = [...new Set([e.placed.by, ...users].filter(Boolean))];
+        await tk.update({ [`flags.${MOD}.placed.seenBy`]: seen });
+        e.placed.seenBy = seen;
+        ui.notifications.info(t("{trap}: known to {players}.", { trap: e.name, players: users.map((u) => game.users.get(u)?.name).join(", ") || t("only the one who set it") }));
+        root.querySelector("[data-knownbox]").style.display = "none";
+      });
+      root.querySelectorAll("[data-share]").forEach((b) => b.addEventListener("click", () => { shareFor = b.dataset.share; root.querySelector("[data-sharebox]").style.display = ""; }));
+      root.querySelector("[data-share-send]")?.addEventListener("click", async () => {
+        const users = [...root.querySelectorAll("[data-sharebox] input:checked")].map((x) => x.value);
+        const x = ent(shareFor);
+        if (!x || !users.length) return ui.notifications.warn(t("Choose a trap and at least one player."));
+        await postRequest({ type: "share", tokenUuid: x.uuid, trapName: x.name, users, actorName: game.user.name });
+        ui.notifications.info(t("{trap} will be shown to {players}.", { trap: x.name, players: users.map((u) => game.users.get(u)?.name).join(", ") }));
+        root.querySelector("[data-sharebox]").style.display = "none";
+      });
+    },
+  });
+}
+
+/* -------------------------------------------- */
+/*  Hooks                                       */
+/* -------------------------------------------- */
+
+function onTokenHud(hud, html) {
+  if (!game.user.isGM) return;
+  const doc = hud.object?.document;
+  const p = placedOf(doc);
+  if (!p) return;
+  const root = html instanceof HTMLElement ? html : html?.[0];
+  const col = root?.querySelector(".col.right");
+  if (!col) return;
+  const order = ["active", "disabled", "triggered"];
+  const next = order[(order.indexOf(p.status) + 1) % order.length];
+  const btn = document.createElement("div");
+  btn.className = "control-icon";
+  btn.dataset.tooltip = t("Trap: {status} (click: {next})", { status: statusName(p.status), next: statusName(next) });
+  btn.innerHTML = `<i class="${STATUS_ICON[p.status]}"></i>`;
+  btn.addEventListener("click", async (ev) => { ev.preventDefault(); await setStatus(doc, next); hud.render?.(); });
+  col.append(btn);
+}
+
+function actorContext(entries) {
+  const getActor = (li) => game.actors.get((li?.dataset ?? li?.[0]?.dataset)?.entryId ?? (li?.dataset ?? li?.[0]?.dataset)?.documentId);
+  entries.push({
+    name: t("Make Trap Kit"), icon: '<i class="fas fa-box"></i>',
+    condition: (li) => game.user.isGM && getActor(li)?.type === "trap",
+    callback: async (li) => { try { await createKitItem(getActor(li)); } catch (err) { ui.notifications.error(err.message); } },
+  });
+}
+
+export function registerKits() {
+  if (!globalThis.Hooks) return;
+  Hooks.once("init", () => {
+    for (const [k, o] of Object.entries(KIT_SETTINGS)) game.settings.register(MOD, k, { scope: "world", config: true, ...o, onChange: () => scheduleMarkers() });
+  });
+  // D35E: a custom use for the kit (D35E.ItemUse.preUseItem; the Tome of Ability items use the same hook)
+  Hooks.on("D35E.ItemUse.preUseItem", (item, actor, hookValues) => {
+    if (!item?.flags?.[MOD]?.kit) return;
+    hookValues.customUse = true;
+    useKit(item, actor ?? item.actor);
+  });
+  Hooks.on("createChatMessage", (m) => onCreateMessage(m));
+  globalThis.AxecleftTools?.onChatRender ? globalThis.AxecleftTools.onChatRender((m, h) => onRenderMessage(m, h)) : Hooks.on("renderChatMessageHTML", (m, h) => onRenderMessage(m, h));
+  Hooks.on("deleteToken", (t) => onDeleteToken(t));
+  Hooks.on("renderTokenHUD", (hud, html) => onTokenHud(hud, html));
+  Hooks.on("canvasReady", () => { scheduleMarkers(); adoptScene(canvas?.scene).catch(() => {}); });
+  // A trap token the GM places by hand becomes a placed trap (status, sharing, recovery)
+  Hooks.on("createToken", (t, opts, userId) => { if (userId === game.user?.id && !placedOf(t)) adoptTrap(t).catch((e) => console.warn("Traps |", e)); });
+  for (const h of ["createToken", "updateToken", "deleteToken"]) Hooks.on(h, (t) => { if (placedOf(t)) { syncRegistry(t.parent); scheduleMarkers(); } });
+  Hooks.on("updateScene", (scene, change) => { if (change?.flags?.[MOD] && scene.id === canvas?.scene?.id) scheduleMarkers(); });
+  Hooks.once("ready", () => { for (const sc of game.scenes ?? []) if (sc.tokens.some((t) => placedOf(t)) || sc.flags?.[MOD]?.traps) syncRegistry(sc); });
+  Hooks.on("getActorContextOptions", (app, entries) => actorContext(entries)); // Foundry 13+
+  Hooks.on("getActorDirectoryEntryContext", (html, entries) => actorContext(entries)); // Foundry 11-12
+  globalThis.AxecleftTools?.register({
+    module: MOD, name: "my-traps", title: /*t*/"My Traps", icon: "fas fa-dungeon",
+    hint: /*t*/"Traps set from trap kits: status, sharing markers, recovering", gmOnly: false, onClick: () => openMyTraps(),
+  });
+  Hooks.once("ready", () => {
+    const mod = game.modules.get(MOD);
+    if (mod) mod.api = { ...(mod.api ?? {}), makeKit, createKitItem, openMyTraps, placedTraps, setStatus, trapFacts: facts };
+  });
+}
+
+registerKits();
