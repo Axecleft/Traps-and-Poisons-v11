@@ -257,6 +257,9 @@ function onRenderMessage(message, html) {
 
 /** Let the user click a spot on the scene. Resolves { x, y } (top-left of the grid square) or null. */
 function pickPoint() {
+  // On a phone with Axecleft's VooDoo, its touch layer covers the map: VooDoo takes the tap
+  const vd = game.modules.get("axeclefts-voodoo");
+  if (vd?.active && vd.api?.canPick?.()) return vd.api.pickPoint({ prompt: t("Tap where to set the trap.") });
   return new Promise((resolve) => {
     const stage = canvas?.stage;
     if (!stage) return resolve(null);
@@ -438,25 +441,38 @@ async function doShare(r) {
   return H("The marker for {trap} is shown to {users}.", { trap: token.name, users: (r.users ?? []).map((u) => game.users.get(u)?.name ?? "?").join(", ") });
 }
 
-/** The character recovering a trap: the only character the user owns, or the one they pick (their selected token's or assigned character first). */
-async function recoveringActor() {
+/**
+ * The character recovering a trap: the only character the user owns, or the one they pick (their selected token's or
+ * assigned character first). The GM always picks: the character who set the trap first, then a selected token's actor,
+ * then the player characters on the scene and the players' assigned characters.
+ */
+async function recoveringActor(p = null) {
   // The character on the scene first (1.14.6.14): an unlinked token has its own copy of the actor, with its own skills
   const sceneActors = (canvas?.tokens?.placeables ?? []).filter((x) => x.actor?.isOwner && x.actor.type === "character").map((x) => x.actor);
   const controlled = canvas?.tokens?.controlled?.find((x) => x.actor?.isOwner)?.actor ?? null;
   const own = game.user.character ? sceneActors.find((a) => (a.isToken ? a.token?.actorId : a.id) === game.user.character.id) ?? game.user.character : null;
   const first = controlled ?? own ?? null;
-  if (game.user.isGM) return first;
-  const owned = (game.actors?.contents ?? [...(game.actors ?? [])]).filter((a) => a.isOwner && a.type === "character");
+  let owned;
+  if (game.user.isGM) {
+    let setter = null;
+    try { setter = p?.byActor ? await fromUuid(p.byActor) : null; } catch (e) { setter = null; }
+    const baseOf = (a) => (a.isToken ? a.token?.actorId : a.id);
+    const onScene = (a) => (a ? sceneActors.find((x) => baseOf(x) === baseOf(a)) ?? a : null); // the token's copy when on the scene
+    owned = [onScene(setter), controlled?.type === "trap" ? null : controlled, ...game.users.filter((u) => !u.isGM && u.character).map((u) => onScene(u.character))].filter(Boolean);
+  } else {
+    owned = (game.actors?.contents ?? [...(game.actors ?? [])]).filter((a) => a.isOwner && a.type === "character");
+  }
   // One entry per character: the token's copy when it is on the scene, else the sidebar actor
   const list = [];
   const seen = new Set();
-  for (const a of [first, ...sceneActors, ...owned].filter(Boolean)) {
+  for (const a of (game.user.isGM ? [...owned, ...sceneActors] : [first, ...sceneActors, ...owned]).filter(Boolean)) {
     const base = a.isToken ? a.token?.actorId : a.id;
     if (seen.has(base)) continue;
     seen.add(base);
     list.push(a);
   }
-  if (list.length <= 1) return list[0] ?? null;
+  if (list.length <= 1 && !game.user.isGM) return list[0] ?? null;
+  if (!list.length) return null;
   const DialogV2 = (globalThis.AxecleftTools?.DialogV2 ?? foundry.applications.api.DialogV2);
   const pick = await DialogV2.wait({
     window: { title: t("Who recovers the trap?"), icon: "fas fa-box" }, rejectClose: false,
@@ -483,7 +499,7 @@ export async function recover(entry) {
   if (p.status !== "active") return ui.notifications.warn(t("{trap} is {status}; only active traps can be recovered.", { trap: tokenDoc.name, status: statusName(p.status).toLowerCase() }));
   // Only mechanical traps go back into a kit (1.14.6.16): a magic trap is a spell, not parts to pack up
   if (await isMagicPlaced(tokenDoc, p)) return ui.notifications.warn(t("{trap} is a magic trap; only mechanical traps can be packed back into a kit (disable it with Disable Device instead).", { trap: tokenDoc.name }));
-  const actor = await recoveringActor();
+  const actor = await recoveringActor(p);
   if (!actor) return ui.notifications.warn(t("You have no character to recover the trap with."));
   const dev = actor.system?.skills?.dev ?? {};
   if (!((Number(dev.rank) || 0) > 0)) return ui.notifications.warn(t("{name} has no ranks in Disable Device (trained only).", { name: actor.name }));
@@ -608,7 +624,7 @@ export async function openMyTraps() {
     const status = gm ? `<select data-status="${x.id}">${Object.keys(STATUS).map((k) => `<option value="${k}"${k === p.status ? " selected" : ""}>${esc(statusName(k))}</option>`).join("")}</select>`
       : `<i class="${STATUS_ICON[p.status] ?? ""}"></i> ${esc(statusName(p.status))}`;
     const canShare = !gm && setting("kitVisibility") === "marker" && ((p.seenBy ?? []).includes(game.user.id)) && players.length;
-    const canRecover = setting("kitRecovery") && p.status === "active" && !gm && p.magic !== true;
+    const canRecover = setting("kitRecovery") && p.status === "active" && p.magic !== true; // the GM too, for a character (1.14.6.24)
     return `<tr><td>${esc(x.name)}${targeted.has(x.id) ? ` <i class="fas fa-crosshairs" title="${H("Targeted")}"></i>` : ""}</td><td>${p.cr ?? "?"}</td><td>${by}</td><td>${status}</td><td style="white-space:nowrap">
       ${canShare ? `<button type="button" data-share="${x.id}" title="${H("Show its marker to other players")}"><i class="fas fa-share-nodes"></i></button>` : ""}
       ${canRecover ? `<button type="button" data-recover="${x.id}" title="${H("Pack it back into a kit (Disable Device DC {dc})", { dc: (Number(p.disable) || 20) + 5 })}"><i class="fas fa-box"></i></button>` : ""}

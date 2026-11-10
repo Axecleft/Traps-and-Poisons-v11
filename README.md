@@ -3,6 +3,21 @@ A collection of Traps, Poisons, and Diseases from the Dungeons and Dragons 3.5 S
 
 Changelog:
 
+v1.14.6.24:
+
+- **One link installs the whole suite.** Every Axecleft module now recommends all the others (Gemstones, Armory, Curios, Traps, Adventurers and Minions, Hoard Editor, Printable Sheets, VooDoo and the Tools Suite manager), so installing any one of them offers to install the rest.
+- Ships Axecleft's Tools 9.74: **Help on hover**. In a window that has a tour, turn on **Help on hover** in its title bar's **Help** button and rest the mouse on a part of the window to see that part's tour text.
+- Tours reuse the windows' own sentences where they said the same thing (Axecleft's Tools 9.73: a tour step can be built from several texts), so a translator translates each once. Asked by Gilgalad.
+- **Trap kits on a phone** (Axecleft's VooDoo): using a kit now switches to VooDoo's map and asks you to tap where the trap goes. Before, it waited for a click the phone's map never passes on, so the GM was never asked and the kit wasn't used.
+- **The GM can recover a placed trap** from My Traps (the box button), for a character: the one who set the trap is offered first, then a selected token's actor and the players' characters. The Disable Device check is the character's, as when a player recovers it.
+- **Trap crafting opens much faster.** To list the trap actors, the Craft (trapmaking) and magic trap windows read every Actor compendium with its actors' notes, about 9 MB in a world with SD-1 and D35E's bestiaries. Each compendium is now read lightly first (names and types), and only those that hold trap actors are read with their notes.
+
+v1.14.6.23:
+
+- **Condition buffs' descriptions** (Common Trap Buffs): most showed another buff's text (Shaken showed Sickened's, Sickened Frightened's, Frightened Pinned's, Pinned Paralyzed's…) or pointed at buffs that are gone (Grappled, Exhausted, Helpless, Stunned), which also put a "Cannot read properties of null (reading 'getDescription')" error in the console whenever Token Action HUD drew a token with one of them. Each now shows its own condition: D35E's matching buff's description (Blinded, Dazed, Dazzled, Deafened, Disabled, Dying, Entangled, Exhausted, Fatigued, Frightened, Helpless, Invisible, Paralyzed, Pinned, Prone, Shaken, Sickened, Stable, Staggered, Stunned, Unconscious), or its own text (Grappled, Banished, Petrified, Polymorphed, Wild-shaped).
+- **Petrified** sets the Helpless and Paralyzed conditions when it starts and clears them when it ends (it is stored inactive in the compendium, so those actions run when a trap or ability applies it).
+- New **Panicked** buff, for fear effects (and A&M's Frightful Presence): sets the fear condition while it lasts.
+
 v1.14.6.22:
 
 - Ships Axecleft's Tools 9.71: **tours**. Foundry's own guided tours (Configure Settings → **Tour Management**) walk through a window one tab at a time, pointing out what each part of the tab does. Each Axecleft window with tours also has **Tour of this tab** in its ⋮ menu (top right), or a **Tour** button in its title bar on Foundry 11, and the welcome window has **Take a tour**, which opens Tour Management. Foundry 11, 13 and 14.

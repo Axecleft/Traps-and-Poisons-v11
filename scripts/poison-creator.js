@@ -643,7 +643,7 @@ if (globalThis.Hooks) {
     open: async () => { if (!document.querySelector(".tp-poison-creator")) openPoisonCreator(); for (let i = 0; i < 60 && !document.querySelector(".tp-poison-creator"); i++) await new Promise((r) => setTimeout(r, 50)); },
     title: /*t*/"Poison & Disease Creator", description: /*t*/"Create a poison or disease: its attack and its consumable item.",
     steps: [
-      { id: "template", field: "template", title: /*t*/"Template", content: /*t*/"Start from an existing poison or disease to fill in the form, then change only what you need. Or start blank." },
+      { id: "template", field: "template", title: /*t*/"Template", content: [/*t*/"Start from an existing poison or disease to fill in the form, then change only what you need.", /*t*/"Or start blank."] },
       { id: "kind", field: "kind", title: /*t*/"Type", content: /*t*/"Poison or disease. The boxes below change with it." },
       { id: "name", field: "name", title: /*t*/"Name", content: /*t*/"Its name." },
       { id: "delivery", field: "delivery", title: /*t*/"Delivery", content: /*t*/"How it is delivered: contact, ingested, inhaled or injury." },

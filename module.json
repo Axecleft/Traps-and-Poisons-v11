@@ -1,9 +1,9 @@
 {
   "id": "traps-and-poisons",
   "title": "Axecleft's Traps, Poisons, and Diseases",
-  "version": "1.11.6.22",
+  "version": "1.11.6.24",
   "manifest": "https://github.com/Axecleft/Traps-and-Poisons-v11/releases/latest/download/module.json",
-  "download": "https://github.com/Axecleft/Traps-and-Poisons-v11/releases/download/1.11.6.22/module.zip",
+  "download": "https://github.com/Axecleft/Traps-and-Poisons-v11/releases/download/1.11.6.24/module.zip",
   "url": "https://github.com/Axecleft/Traps-and-Poisons-v11",
   "compatibility": {
     "minimum": "11",
@@ -30,6 +30,12 @@
     ],
     "recommends": [
       {
+        "id": "axecleft-gemstones",
+        "type": "module",
+        "manifest": "https://github.com/Axecleft/Axeclefts-Gemstones-v11/releases/latest/download/module.json",
+        "reason": "Gems, art objects and jewelry for treasure and merchants"
+      },
+      {
         "id": "axeclefts-armory",
         "type": "module",
         "manifest": "https://github.com/Axecleft/Armory-v11/releases/latest/download/module.json",
@@ -42,10 +48,34 @@
         "reason": "Potions, scrolls, wands, rings and wondrous items"
       },
       {
-        "id": "axecleft-gemstones",
+        "id": "axeclefts-adventurers-minions",
         "type": "module",
-        "manifest": "https://github.com/Axecleft/Axeclefts-Gemstones-v11/releases/latest/download/module.json",
-        "reason": "Gems, art objects and jewelry for treasure and merchants"
+        "manifest": "https://github.com/Axecleft/Axeclefts-Adventurers-Minions-v11/releases/latest/download/module.json",
+        "reason": "Build characters, NPCs, creatures and encounters"
+      },
+      {
+        "id": "axeclefts-hoards",
+        "type": "module",
+        "manifest": "https://github.com/Axecleft/Axeclefts-Hoard-Editor-v11/releases/latest/download/module.json",
+        "reason": "Build, save and share out treasure hoards (a Hoards tab in the Treasure Generator)"
+      },
+      {
+        "id": "axeclefts-printable-sheets",
+        "type": "module",
+        "manifest": "https://github.com/Axecleft/Axeclefts-Printable-Sheets-v11/releases/latest/download/module.json",
+        "reason": "Print paper character sheets, stat blocks and spellbooks"
+      },
+      {
+        "id": "axeclefts-voodoo",
+        "type": "module",
+        "manifest": "https://github.com/Axecleft/Axeclefts-VooDoo-v11/releases/latest/download/module.json",
+        "reason": "A character sheet for your players' phones"
+      },
+      {
+        "id": "axeclefts-tool-suite",
+        "type": "module",
+        "manifest": "https://github.com/Axecleft/Axecleft-s-Tools-Suite/releases/latest/download/module.json",
+        "reason": "Turn the suite's modules on and off and check them for updates"
       }
     ]
   },

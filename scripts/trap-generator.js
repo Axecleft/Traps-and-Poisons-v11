@@ -759,7 +759,7 @@ function registerTours() {
     open: async () => { if (!document.querySelector(`.${CUSTOM_CLS}`)) { await loadData(); openCustomizer({ cr: 3, trap: null, count: 1, includeSrd: false, includeRules: false, createActors: true }); } await waitForWindow(CUSTOM_CLS); },
     title: /*t*/"Random Trap Generator: Customize", description: /*t*/"Choose a trap's type, trigger, DCs and effects yourself.",
     steps: [
-      { id: "intro", sel: ".tp-custom > p.hint", title: /*t*/"Customize", content: /*t*/"Every value of the trap you chose (here a random CR 3 trap). Leave anything blank to roll it; the boxes suggest the values the generator uses, but you can type any value." },
+      { id: "intro", sel: ".tp-custom > p.hint", title: /*t*/"Customize", content: [/*t*/"Every value of the trap you chose (here a random CR 3 trap).", /*t*/"Leave anything blank to roll it randomly. Boxes suggest the values the generator uses, but you can type any value."] },
       { id: "trap", sel: ".tp-custom fieldset:first-of-type", title: /*t*/"Trap", content: /*t*/"Its type (mechanical or magic), trigger, reset and bypass, and the Search and Disable Device DCs." },
       { id: "effect", sel: ".tp-custom fieldset:nth-of-type(2)", title: /*t*/"Effect", content: /*t*/"What it does: its attack, damage, save and area. Where a trap has several forms, Choose picks one; each box can be typed or left blank to roll." },
       { id: "buttons", sel: buttons, title: /*t*/"Generate", direction: "UP", content: /*t*/"Makes the trap with your values (and rolls the blank ones), and posts it to chat. Close this window to leave it." },

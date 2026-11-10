@@ -58,6 +58,23 @@ function trapHelp(magic) {
     </ul></details>`;
 }
 
+/*
+ * Which Actor compendiums hold traps. Reading a compendium's notes is heavy (a bestiary's notes are megabytes), so
+ * each compendium is first read lightly (names and types); only one with trap actors is read with their notes.
+ * Remembered for the session; a compendium that gets a new actor is looked at again.
+ */
+const trapPacks = new Map(); // compendium → has trap actors
+Hooks.on("createActor", (a) => { if (a?.pack) trapPacks.delete(a.pack); });
+async function trapIndex(pack) {
+  if (trapPacks.get(pack.collection) === false) return [];
+  if (!trapPacks.has(pack.collection)) {
+    const has = [...await pack.getIndex({ fields: ["type"] })].some((e) => e.type === "trap");
+    trapPacks.set(pack.collection, has);
+    if (!has) return [];
+  }
+  return enIndex(pack, { fields: ["type", "system.details.cr", "system.details.notes.value"] });
+}
+
 class TrapCraft {
   constructor() { this.list = null; }
 
@@ -70,7 +87,7 @@ class TrapCraft {
       if (wanted.length && !wanted.includes(pack.collection)) continue;
       if (!game.user.isGM && pack.visible === false) continue;
       let index;
-      try { index = await enIndex(pack, { fields: ["type", "system.details.cr", "system.details.notes.value"] }); } catch (e) { continue; }
+      try { index = await trapIndex(pack); } catch (e) { continue; }
       const data = await trapData();
       for (const e of index) {
         if (e.type !== "trap") continue;
@@ -191,7 +208,7 @@ class MagicTrapCraft {
       if (pack.documentName !== "Actor") continue;
       if (!game.user.isGM && pack.visible === false) continue;
       let index;
-      try { index = await enIndex(pack, { fields: ["type", "system.details.cr", "system.details.notes.value"] }); } catch (e) { continue; }
+      try { index = await trapIndex(pack); } catch (e) { continue; }
       for (const e of index) {
         if (e.type !== "trap") continue;
         if (!isMagicTrap({ ...e, flags: { babele: { originalName: e.name } } }, srdTrap({ name: e.name }, data)?.text ?? null)) continue;
@@ -295,7 +312,7 @@ export function registerTrapCrafting() {
     title: /*t*/"Crafting: Trap kits", description: /*t*/"Make a trap kit from a trap actor, to set and recover in play.",
     intro: /*t*/"Make a trap kit (Craft (trapmaking), SRD): a trap a character carries, sets on a scene and can recover. The kit is made from a trap actor the crafter can see.",
     steps: [
-      { id: "trap", field: "craft.trap", title: /*t*/"Trap", content: /*t*/"The trap to make, from the trap actors you can see. Traps from the Random Trap Generator are in the GM's world; the GM can show one to a player (Observer permission) to let them craft it." },
+      { id: "trap", field: "craft.trap", title: /*t*/"Trap", content: [/*t*/"The trap to make, from the trap actors you can see.", /*t*/"Traps from the Random Trap Generator are in the GM's world; the GM can show one to a player (Observer permission) to let them craft it."] },
     ] });
   return craft;
 }
